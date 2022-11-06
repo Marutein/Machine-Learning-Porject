@@ -14,6 +14,7 @@ library(car)
 library(ROCR)
 library(glmnet)
 library(corrplot)
+library(AICcmodavg)
 ```
 
 ```{r}
@@ -102,37 +103,58 @@ print(y4)
 ```{r}
 #Optimal value of λ in the test data
 test.predictors <- data.matrix(test.data[,c(-1)])
-actual<- test.data$Purchase
+actual <- test.data$Purchase
 pred.model = predict(cv.binomial, newx = test.predictors, type = "response",s ="lambda.min")
 
 pred <- prediction(pred.model, test.data$Purchase)
 perf <- performance(pred,"tpr","fpr")
-auc_ROCR<- performance(pred,measure ="auc")
+auc_ROCR <- performance(pred,measure ="auc")
 
 # plot ROC curve
 plot(perf,colorize=FALSE, col="black") 
 lines(c(0,1),c(0,1),col = "gray", lty = 4 )
 text(1,0.15,labels=paste("AUC = ",round(auc_ROCR@y.values[[1]],
                                         digits=2),sep=""),adj=1)
+```
+```{r}
+#new DF excluding betas less important
+drop <- c("PriceCH","PriceMM", "DiscCH", "DiscMM", "SpecialCH", "SalePriceMM","PctDiscMM","ListPriceDiff")
+new.df = df[,!(names(df) %in% drop)]
+#creating a new DF 
+new.df
+```
+```{r}
+#Splitting data
+split = 0.7
+set.seed(1234)
 
+
+train_index <- sample(1:nrow(new.df), split * nrow(new.df))
+test_index <- setdiff(1:nrow(new.df), train_index)
+
+train_data <- new.df[train_index,]
+test_data <- new.df[test_index,]
 ```
 
 ```{r}
+#Learning relationship between predictor variables and the outcome variables using train data set
+predictionModel <- glm(Purchase ~ ., data = train_data,family=binomial(link='logit'))
 
-#define rmse
-rmse <- function(actual, predicted) sqrt(mean((actual - predicted)^2))
+#Predicting putcome in test data set
+test_data$prediction <- predict(predictionModel,newdata = test_data, type ="response")
 
-#define r^2
-r2 <- function(actual, predicted){
-  TSS <- sum((actual - mean(actual))^2)
-  RSS <- sum((actual - predicted)^2)
-  1 - RSS/TSS
-}
+#Converting probabilities YES and NO into a binary class 50% of probability.
+#If predicted probability is 50% or less we classify that prediction as “no: will not purchase the product”. 
+#Above 50% probabilities are classified as "yes: will purchase the product".
+test_data$binary_prediction<-ifelse(test_data$prediction > 0.5,1,0)
+```
 
+```{r}
+#Model Accuracy
+test_data <- test_data %>% 
+  mutate(accurate = 1*(binary_prediction == test_data$Purchase))
 
-rmse <- rmse(actual, pred.model)
-r2 <- r2(actual, pred.model)
-rmse
-r2
+accuracy <- sum(test_data$accurate)/nrow(test_data)
+print (paste("Accuracy:",round(accuracy,3)))
 ```
 
