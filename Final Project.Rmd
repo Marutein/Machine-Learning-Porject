@@ -118,6 +118,18 @@ text(1,0.15,labels=paste("AUC = ",round(auc_ROCR@y.values[[1]],
 ```
 
 ```{r}
+
+#define rmse
+rmse <- function(actual, predicted) sqrt(mean((actual - predicted)^2))
+
+#define r^2
+r2 <- function(actual, predicted){
+  TSS <- sum((actual - mean(actual))^2)
+  RSS <- sum((actual - predicted)^2)
+  1 - RSS/TSS
+}
+
+
 rmse <- rmse(actual, pred.model)
 r2 <- r2(actual, pred.model)
 rmse
