@@ -1,0 +1,122 @@
+---
+title: "Final Project"
+output: html_document
+date: "2022-11-03"
+---
+```{r}
+#Libraries used
+library(dplyr)
+library(plotROC)
+library(ggplot2)
+library(caret)
+library(performance)
+library(car)
+library(ROCR)
+library(glmnet)
+library(corrplot)
+```
+
+```{r}
+#Data set
+df<-read.csv(url("http://data.mishra.us/files/project/OJ_data.csv"))
+df[2:14] <- lapply(df[2:14], as.numeric)
+df$Purchase <- as.factor(df$Purchase)
+sapply(df,class)
+df
+```
+
+```{r}
+#Switching Purchase values: 0 to 1 = MM Purchased and 1 to 0 = MM No Purchased.
+#A factor with levels 0 and 1 indicating whether the customer purchased Citrus Hill (1) or Minute Maid Orange Juice (0).
+
+df <- df %>%
+  mutate(across(Purchase, ~ case_when(. == 0 ~ "Yes",
+                                        . == 1 ~ "No",
+                                        TRUE ~ NA_character_)))
+df <- df %>%
+      mutate(Purchase = ifelse(Purchase == "No",0,1))
+df
+```
+
+```{r}
+#Splitting the data into Train, Test
+split = 0.7
+set.seed(1234)
+
+train.data <- sample(1:nrow(df), split * nrow(df))
+test.data <- setdiff(1:nrow(df), train.data)
+
+train.data <- df[train.data,]
+test.data <- df[test.data,]
+```
+
+```{r}
+predictors <- train.data[,c(-1)]
+purchase <- train.data$Purchase
+```
+
+
+```{r}
+# Checking for multicollinearity and plotting correlations between predictors
+correlation = cor(train.data)
+correlation
+corrplot.mixed(correlation, lower.col = "black", tl.cex=.7,number.cex = .7)
+```
+
+```{r}
+#Logistic Model
+predictionModel <- glm(Purchase ~ ., data = train.data,family=binomial(link='logit'))
+summary(predictionModel)
+
+#Dropping predictors variables perfectly correlated
+drop <- c("PriceDiff","SalePriceCH", "SalePriceMM", "ListPriceDiff")
+train.data = train.data[,!(names(train.data) %in% drop)]
+
+predictionModel <- glm(Purchase ~ ., data = train.data,family=binomial(link='logit'))
+summary(predictionModel)
+
+# Calculating VIF for each of the predictors
+vif(predictionModel)
+```
+
+```{r}
+#Examining predictors quality using LASSO
+predictors <-data.matrix(predictors)
+set.seed(1234)
+
+cv.binomial <- cv.glmnet(x = predictors, y = purchase,
+alpha=1, family="binomial",
+nfolds=4, standardize = TRUE, type.measure = "auc")
+plot(cv.binomial)
+
+#AUC = over 90% of the time the model will classify YES and NO correctly. 
+```
+
+```{r}
+#Applying shrinkage parameter λ
+(best.lambda <- cv.binomial$lambda.min)
+y4<- coef(cv.binomial, s="lambda.min", exact=FALSE)
+print(y4)
+```
+
+```{r}
+#Optimal value of λ in the test data
+test.predictors <- data.matrix(test.data[,c(-1)])
+
+pred = predict(cv.binomial, newx = test.predictors, type = "response",s ="lambda.min")
+
+pred <- prediction(pred, test.data$Purchase)
+perf <- performance(pred,"tpr","fpr")
+auc_ROCR<- performance(pred,measure ="auc")
+
+# plot ROC curve
+plot(perf,colorize=FALSE, col="black") 
+lines(c(0,1),c(0,1),col = "gray", lty = 4 )
+text(1,0.15,labels=paste("AUC = ",round(auc_ROCR@y.values[[1]],
+                                        digits=2),sep=""),adj=1)
+```
+
+```{r}
+
+```
+
