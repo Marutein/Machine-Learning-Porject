@@ -15,6 +15,7 @@ library(ROCR)
 library(glmnet)
 library(corrplot)
 library(AICcmodavg)
+library(plotROC)
 ```
 
 ```{r}
@@ -156,5 +157,26 @@ test_data <- test_data %>%
 
 accuracy <- sum(test_data$accurate)/nrow(test_data)
 print (paste("Accuracy:",round(accuracy,3)))
+```
+```{r}
+#Converting Values to a factors
+test_data$binary_prediction<-as.factor(test_data$binary_prediction)
+test_data$Purchase<-as.factor(test_data$Purchase)
+
+#Confusion Matrix table
+t(confusionMatrix(test_data$binary_prediction,test_data$Purchase)$table)
+```
+```{r}
+#Precision and Recall values
+confusionMatrix(test_data$binary_prediction,test_data$Purchase)$byClass
+```
+
+```{r}
+#ROC Curve
+roc_d <- as.data.frame(cbind(test_data$prediction,test_data$Purchase))
+basicplot <- ggplot(roc_d, aes(d = V2, m = V1)) + geom_roc(n.cuts = 8, labelsize = 4)
+styledplot <- basicplot +
+style_roc(xlab = "False Positive Rate", ylab ="True Positive Rate")
+styledplot
 ```
 
