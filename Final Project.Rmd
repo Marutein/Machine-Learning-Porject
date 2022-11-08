@@ -71,7 +71,7 @@ predictionModel <- glm(Purchase ~ ., data = train.data,family=binomial(link='log
 summary(predictionModel)
 
 #Dropping predictors variables perfectly correlated
-drop <- c("PriceDiff","SalePriceCH", "SalePriceMM", "ListPriceDiff")
+drop <- c("SalePriceCH", "SalePriceMM", "ListPriceDiff")
 train.data = train.data[,!(names(train.data) %in% drop)]
 
 predictionModel <- glm(Purchase ~ ., data = train.data,family=binomial(link='logit'))
@@ -178,5 +178,9 @@ basicplot <- ggplot(roc_d, aes(d = V2, m = V1)) + geom_roc(n.cuts = 8, labelsize
 styledplot <- basicplot +
 style_roc(xlab = "False Positive Rate", ylab ="True Positive Rate")
 styledplot
+```
+
+```{r}
+
 ```
 
