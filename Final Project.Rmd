@@ -192,6 +192,8 @@ library(xgboost)
 #Preparing Data
 set.seed(1234)
 
+df$Purchase <- factor(df$Purchase)
+
 data_testtrn <- initial_split(df, prop = 0.7, strata = Purchase)
 
 train.data.GBT <- training(data_testtrn)
@@ -239,21 +241,17 @@ purchase_wf <- workflow() %>%
 
 ```{r}
 #Performing Metrics to get the best model
-doParallel::registerDoParallel(cores = 10)
+#doParallel::registerDoParallel(cores = 10)
 
 set.seed(1234)
 purchase_tune <- purchase_wf %>% 
   tune_grid(
     resamples = purchase_folds,
     grid = hyper_grid,
-    metrics = metric_set(roc_auc, accuracy, sens, spec, bal_accuracy)
+    metrics = metric_set(roc_auc)
   ) 
 
 show_best(purchase_tune, metric = "roc_auc", n = 5)
-show_best(purchase_tune, metric = "accuracy", n = 5)
-show_best(purchase_tune, metric = "sens", n = 5)
-show_best(purchase_tune, metric = "spec", n = 5)
-show_best(purchase_tune, metric = "bal_accuracy", n = 5)
 
 best_model <- purchase_tune %>%
   select_best("roc_auc")
