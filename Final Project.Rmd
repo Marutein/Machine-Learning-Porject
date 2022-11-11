@@ -27,7 +27,7 @@ sapply(df,class)
 df
 ```
 
-**Logistics Regression**
+**Logistic Regression**
 ```{r}
 #Switching Purchase values: 0 to 1 = MM Purchased and 1 to 0 = MM No Purchased.
 #A factor with levels 0 and 1 indicating whether the customer purchased Citrus Hill (1) or Minute Maid Orange Juice (0).
