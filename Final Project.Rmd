@@ -4,8 +4,6 @@ output: html_document
 date: "2022-11-03"
 ---
 ```{r}
-#Gary test
-
 #Libraries used
 library(dplyr)
 library(plotROC)
@@ -28,6 +26,7 @@ df$Purchase <- as.factor(df$Purchase)
 sapply(df,class)
 df
 ```
+
 **Logistics Regression**
 ```{r}
 #Switching Purchase values: 0 to 1 = MM Purchased and 1 to 0 = MM No Purchased.
@@ -69,14 +68,14 @@ corrplot.mixed(correlation, lower.col = "black", tl.cex=.7,number.cex = .7)
 
 ```{r}
 #Logistic Model
-predictionModel <- glm(Purchase ~ ., data = train.data,family=binomial(link='logit'))
-summary(predictionModel)
+predictionModel1 <- glm(Purchase ~ ., data = train.data,family=binomial(link='logit'))
+summary(predictionModel1)
 
 #Dropping predictors variables perfectly correlated
-drop <- c("SalePriceCH", "SalePriceMM", "ListPriceDiff")
+drop <- c("SalePriceCH", "SalePriceMM", "ListPriceDiff","PriceDiff")
 train.data = train.data[,!(names(train.data) %in% drop)]
 
-predictionModel <- glm(Purchase ~ ., data = train.data,family=binomial(link='logit'))
+predictionModel <- glm(Purchase ~ ., data = train.data, family=binomial(link='logit'))
 summary(predictionModel)
 
 # Calculating VIF for each of the predictors
@@ -119,6 +118,7 @@ lines(c(0,1),c(0,1),col = "gray", lty = 4 )
 text(1,0.15,labels=paste("AUC = ",round(auc_ROCR@y.values[[1]],
                                         digits=2),sep=""),adj=1)
 ```
+
 ```{r}
 #new DF excluding betas less important
 drop <- c("PriceCH","PriceMM", "DiscCH", "DiscMM", "SpecialCH", "SalePriceMM","PctDiscMM","ListPriceDiff")
@@ -126,6 +126,7 @@ new.df = df[,!(names(df) %in% drop)]
 #creating a new DF 
 new.df
 ```
+
 ```{r}
 #Splitting data
 split = 0.7
@@ -160,6 +161,7 @@ test_data <- test_data %>%
 accuracy <- sum(test_data$accurate)/nrow(test_data)
 print (paste("Accuracy:",round(accuracy,3)))
 ```
+
 ```{r}
 #Converting Values to a factors
 test_data$binary_prediction<-as.factor(test_data$binary_prediction)
@@ -168,6 +170,7 @@ test_data$Purchase<-as.factor(test_data$Purchase)
 #Confusion Matrix table
 t(confusionMatrix(test_data$binary_prediction,test_data$Purchase)$table)
 ```
+
 ```{r}
 #Precision and Recall values
 confusionMatrix(test_data$binary_prediction,test_data$Purchase)$byClass
@@ -181,16 +184,21 @@ styledplot <- basicplot +
 style_roc(xlab = "False Positive Rate", ylab ="True Positive Rate")
 styledplot
 ```
+
+
 **Gradient Boosted Tree**
 
 ```{r}
 library(tidymodels)
 library(xgboost)
+library(vip)
+library(DALEXtra)
 ```
 
 ```{r}
 #Preparing Data
 set.seed(1234)
+df$Purchase<-as.factor(df$Purchase)
 
 data_testtrn <- initial_split(df, prop = 0.7, strata = Purchase)
 
@@ -239,21 +247,17 @@ purchase_wf <- workflow() %>%
 
 ```{r}
 #Performing Metrics to get the best model
-doParallel::registerDoParallel(cores = 10)
 
 set.seed(1234)
 purchase_tune <- purchase_wf %>% 
   tune_grid(
     resamples = purchase_folds,
     grid = hyper_grid,
-    metrics = metric_set(roc_auc, accuracy, sens, spec, bal_accuracy)
+    metrics = metric_set(roc_auc)
   ) 
 
 show_best(purchase_tune, metric = "roc_auc", n = 5)
-show_best(purchase_tune, metric = "accuracy", n = 5)
-show_best(purchase_tune, metric = "sens", n = 5)
-show_best(purchase_tune, metric = "spec", n = 5)
-show_best(purchase_tune, metric = "bal_accuracy", n = 5)
+
 
 best_model <- purchase_tune %>%
   select_best("roc_auc")
@@ -275,3 +279,31 @@ final_fit %>%
   collect_metrics()
 ```
 
+```{r}
+#Plotting which variables played an important role
+final_workflow %>%
+  fit(data = train.data.GBT) %>%
+  extract_fit_parsnip() %>%
+  vip(geom = "point")
+```
+
+```{r}
+#Plot Partial Dependency
+model_fitted <- final_workflow %>%
+  fit(data = train.data.GBT)
+explainer_rf <- explain_tidymodels(model_fitted, 
+                                   data = train.data.GBT[,c(-1)],
+                                   y = train.data.GBT$Purchase, 
+                                   type = "pdp",verbose = FALSE)
+
+pdp_LoyalCH <- model_profile(explainer_rf,
+                             variables = "LoyalCH", N=NULL)
+pdp_PriceDiff <- model_profile(explainer_rf,
+                             variables = "PriceDiff", N=NULL)
+pdp_DiscCH <- model_profile(explainer_rf,
+                             variables = "DiscCH", N=NULL)
+
+plot(pdp_LoyalCH)
+plot(pdp_PriceDiff)
+plot(pdp_DiscCH)
+```
