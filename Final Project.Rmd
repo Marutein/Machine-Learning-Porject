@@ -26,7 +26,7 @@ df$Purchase <- as.factor(df$Purchase)
 sapply(df,class)
 df
 ```
-
+**Logistics Regression**
 ```{r}
 #Switching Purchase values: 0 to 1 = MM Purchased and 1 to 0 = MM No Purchased.
 #A factor with levels 0 and 1 indicating whether the customer purchased Citrus Hill (1) or Minute Maid Orange Juice (0).
@@ -179,8 +179,97 @@ styledplot <- basicplot +
 style_roc(xlab = "False Positive Rate", ylab ="True Positive Rate")
 styledplot
 ```
+**Gradient Boosted Tree**
 
 ```{r}
+library(tidymodels)
+library(xgboost)
+```
 
+```{r}
+#Preparing Data
+set.seed(1234)
+
+data_testtrn <- initial_split(df, prop = 0.7, strata = Purchase)
+
+train.data.GBT <- training(data_testtrn)
+test.data.GBT <- testing(data_testtrn)
+
+train.data.GBT$Purchase<-as.factor(train.data.GBT$Purchase)
+test.data.GBT$Purchase<-as.factor(test.data.GBT$Purchase)
+data_testtrn$Purchase<-as.factor(data_testtrn$Purchase)
+```
+
+```{r}
+#Model Formulation
+rec_purchase <- recipe(Purchase~., train.data.GBT)%>%
+  prep(training = train.data.GBT)
+rec_purchase
+```
+```{r}
+#Algorithm Type
+model_purchase <- boost_tree(
+                     trees = tune(),
+                     tree_depth = tune(),
+                     learn_rate = tune()) %>% 
+                     set_engine("xgboost", verbosity = 0) %>% 
+                     set_mode("classification")
+```
+
+```{r}
+#Tuning Hyper parameters
+hyper_grid <- grid_regular(
+  trees(),
+  tree_depth(),
+  learn_rate(),
+  levels = 4)
+
+#Cross-validation vfold_cv
+purchase_folds <- vfold_cv(train.data.GBT, v=5)
+```
+
+```{r}
+#Aggregating Information to fit the Model
+purchase_wf <- workflow() %>%
+  add_model(model_purchase) %>%
+  add_recipe(rec_purchase)
+```
+
+```{r}
+#Performing Metrics to get the best model
+doParallel::registerDoParallel(cores = 10)
+
+set.seed(1234)
+purchase_tune <- purchase_wf %>% 
+  tune_grid(
+    resamples = purchase_folds,
+    grid = hyper_grid,
+    metrics = metric_set(roc_auc, accuracy, sens, spec, bal_accuracy)
+  ) 
+
+show_best(purchase_tune, metric = "roc_auc", n = 5)
+show_best(purchase_tune, metric = "accuracy", n = 5)
+show_best(purchase_tune, metric = "sens", n = 5)
+show_best(purchase_tune, metric = "spec", n = 5)
+show_best(purchase_tune, metric = "bal_accuracy", n = 5)
+
+best_model <- purchase_tune %>%
+  select_best("roc_auc")
+best_model
+```
+```{r}
+#Updating Workflow
+final_workflow <- 
+  purchase_wf %>% 
+  finalize_workflow(best_model)
+```
+
+```{r}
+#Validate performance on the test data
+final_fit <- final_workflow %>%
+    last_fit(split = data_testtrn) 
+
+final_fit %>%
+  collect_metrics()
 ```
 
