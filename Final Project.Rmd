@@ -1,9 +1,26 @@
 ---
-title: "Final Project"
-output: html_document
+title: "Mahcine Learning Final Project"
+subtitle: "Predicting Orange Juice Purchase"
+author: "Gary Buckley and Ivan Espino"
+output: pdf_document
 date: "2022-11-03"
 ---
-```{r}
+
+# Problem Statement
+
+The Orange Juice Category presents a significant opportunity for our firm. We sell two brands of orange juice to our customers: Citrus Hill (CH) and Minute Maid (MM). Our company makes higher margins on MM orange juice than CH, so the higher percentage of customers that buy MM, the more profit we will make.
+
+How do we know who will buy MM orange juice? There are two layers to this question. First, we need to explore what factors cause (or are at least correlated with) customers to buy MM over CH. Answering this question allows us to target our advertising to these customers, position our brand to attract these types of buyers, and other possible strategies to improve our margin in the orange juice category. 
+
+The second question is can we predict who will buy MM over CH? This is similar to question 1, but goes a bit further. Question 1 is a descriptive analysis - figuring our what influenced buyers to purchase MM in the past. This second question is a predictive analysis: if a new customer walks into our store, we want to predict how likely they are to purchase MM. The results from question 1 and 2 work together. If we know what factors influence people to buy MM, we can adjust our strategy accordingly. Then, if we can predict purchase behavior, we can predict the influence of the new strategy on our revenue. This allows us to run a cost-benefit analysis and determine if the strategy is worthwhile.
+
+To answer these questions, we have collected 1070 purchases in which the customer purchased orange juice. Note that we are limiting ourselves to the population of consumsers that buy orange juice. We are NOT finding what causes a customer to buy or not buy orange juice. Instead, we are finding what causes a customer who is purchasing orange juice to choose MM over CH. 
+
+As a result of our analysis, the brand manager can expect us to identify the factors that most strongly influence whether a customer purchases MM or not. In addition, the sales manager can expect a model that will predict whether a customer will purchase MM or CH along with the expected performance of the model.
+
+#Methods
+
+```{r, warning=FALSE,library}
 #Libraries used
 library(dplyr)
 library(plotROC)
@@ -18,16 +35,25 @@ library(AICcmodavg)
 library(plotROC)
 ```
 
-```{r}
+We start by pulling and preparing our data
+
+```{r, data}
 #Data set
 df<-read.csv(url("http://data.mishra.us/files/project/OJ_data.csv"))
+#ensure all predictors are numeric
 df[2:14] <- lapply(df[2:14], as.numeric)
+#code target as factor since it is binary
 df$Purchase <- as.factor(df$Purchase)
-sapply(df,class)
-df
+glimpse(df)
+head(df)
 ```
 
 **Logistic Regression**
+
+We begin by building a logistic regression model. The advantage of regression models is that they clearly measure the impact of a factor on our target variable. We run a logistic regression since our target variable is binary. This model will help us evaluate which factors are the most important influencers of purchase behavior. 
+
+The data is coded such that CH is labeled as 1 and MM as 0. We will swtich these since we want to model whether the customer purchased MM.
+
 ```{r}
 #Switching Purchase values: 0 to 1 = MM Purchased and 1 to 0 = MM No Purchased.
 #A factor with levels 0 and 1 indicating whether the customer purchased Citrus Hill (1) or Minute Maid Orange Juice (0).
@@ -38,8 +64,11 @@ df <- df %>%
                                         TRUE ~ NA_character_)))
 df <- df %>%
       mutate(Purchase = ifelse(Purchase == "No",0,1))
-df
+
+head(df)
 ```
+
+We'd like to evaluate the predictive power of this model. To do so, we must hold out some of the data so we can test our model on it. We will keep 70% of our data to train the model and use 30% to test it.
 
 ```{r}
 #Splitting the data into Train, Test
@@ -249,10 +278,7 @@ purchase_wf <- workflow() %>%
 
 ```{r}
 #Performing Metrics to get the best model
-<<<<<<< HEAD
 #doParallel::registerDoParallel(cores = 10)
-=======
->>>>>>> 3d4a51bb57423d31c6212ef0b05ee1a850509afc
 
 set.seed(1234)
 purchase_tune <- purchase_wf %>% 
@@ -263,10 +289,7 @@ purchase_tune <- purchase_wf %>%
   ) 
 
 show_best(purchase_tune, metric = "roc_auc", n = 5)
-<<<<<<< HEAD
-=======
 
->>>>>>> 3d4a51bb57423d31c6212ef0b05ee1a850509afc
 
 best_model <- purchase_tune %>%
   select_best("roc_auc")
