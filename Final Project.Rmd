@@ -54,7 +54,7 @@ We begin by building a logistic regression model. The advantage of regression mo
 
 The data is coded such that CH is labeled as 1 and MM as 0. We will swtich these since we want to model whether the customer purchased MM.
 
-```{r}
+```{r, refactor target}
 #Switching Purchase values: 0 to 1 = MM Purchased and 1 to 0 = MM No Purchased.
 #A factor with levels 0 and 1 indicating whether the customer purchased Citrus Hill (1) or Minute Maid Orange Juice (0).
 
@@ -70,7 +70,7 @@ head(df)
 
 We'd like to evaluate the predictive power of this model. To do so, we must hold out some of the data so we can test our model on it. We will keep 70% of our data to train the model and use 30% to test it.
 
-```{r}
+```{r, logistic split}
 #Splitting the data into Train, Test
 split = 0.7
 set.seed(1234)
@@ -82,24 +82,36 @@ train.data <- df[train.data,]
 test.data <- df[test.data,]
 ```
 
-```{r}
+To ensure our model runs as well as possible, we need to process our predictor variables with some tests and checks.
+
+```{r, logistic predictors}
+#split predictors and target
 predictors <- train.data[,c(-1)]
 purchase <- train.data$Purchase
 ```
 
+Our first check is whether our variables are collinear. In other words, if as one predictor goes up another also goes up, they are encoding the same information. We don't want to 'double count' this influence, so we should only use one. (There are other reasons to drop one of the variables too - it just overall helps the model run better).
 
-```{r}
+Below you see a chart of our collinearity. Big dark dots represent high collinearity that we need to do something about. 
+
+```{r, multicorrelation}
 # Checking for multicollinearity and plotting correlations between predictors
 correlation = cor(train.data)
-correlation
+#correlation
 corrplot.mixed(correlation, lower.col = "black", tl.cex=.7,number.cex = .7)
 ```
 
-```{r}
+This our baseline model *without* removing the collinearity. Notice we get some NA values, meaning the predictors are perfecty correlated (correlation = 1 or -1) with others in the model. We need to remove the predictors.  
+
+```{r, logistic baseline}
 #Logistic Model
 predictionModel1 <- glm(Purchase ~ ., data = train.data,family=binomial(link='logit'))
 summary(predictionModel1)
+```
 
+We drop the variables and our NA values go away.
+
+```{r, logistic model 2}
 #Dropping predictors variables perfectly correlated
 drop <- c("SalePriceCH", "SalePriceMM", "ListPriceDiff","PriceDiff")
 train.data = train.data[,!(names(train.data) %in% drop)]
@@ -107,11 +119,18 @@ train.data = train.data[,!(names(train.data) %in% drop)]
 predictionModel <- glm(Purchase ~ ., data = train.data, family=binomial(link='logit'))
 summary(predictionModel)
 
+```
+
+We have dropped the perfectly collinear variables, but we'd still like to remove those with high colliearity as well. To do so, we run a test to measure collinearity. High numbers mean high collinearity.
+
+```{r, logistic VIF}
 # Calculating VIF for each of the predictors
 vif(predictionModel)
 ```
 
-```{r}
+We have values over 5, meaning we still have high collinearity. To address these, we will use a generalized linear regression technique that automatically selects which variables to exclude. The technique requires we choose a parameter to help us; the plot is showing us which value to choose for our parameter. 
+
+```{r, lasso}
 #Examining predictors quality using LASSO
 predictors <-data.matrix(predictors)
 set.seed(1234)
@@ -124,12 +143,16 @@ plot(cv.binomial)
 #AUC = over 90% of the time the model will classify YES and NO correctly. 
 ```
 
-```{r}
+The dots tell us we also need to drop these variables to avoid multicollinearity.
+
+```{r, lasso 2}
 #Applying shrinkage parameter λ
 (best.lambda <- cv.binomial$lambda.min)
 y4<- coef(cv.binomial, s="lambda.min", exact=FALSE)
 print(y4)
 ```
+
+### FIXME
 
 ```{r}
 #Optimal value of λ in the test data
@@ -148,7 +171,9 @@ text(1,0.15,labels=paste("AUC = ",round(auc_ROCR@y.values[[1]],
                                         digits=2),sep=""),adj=1)
 ```
 
-```{r}
+We now drop all the columns that were causing issues to get our final dataset. 
+
+```{r, final dataset}
 #new DF excluding betas less important
 drop <- c("PriceCH","PriceMM", "DiscCH", "DiscMM", "SpecialCH", "SalePriceMM","PctDiscMM","ListPriceDiff")
 new.df = df[,!(names(df) %in% drop)]
@@ -156,11 +181,12 @@ new.df = df[,!(names(df) %in% drop)]
 new.df
 ```
 
-```{r}
+We again split our final dataset so we can test the performance of our model
+
+```{r, final dataset split}
 #Splitting data
 split = 0.7
 set.seed(1234)
-
 
 train_index <- sample(1:nrow(new.df), split * nrow(new.df))
 test_index <- setdiff(1:nrow(new.df), train_index)
@@ -169,7 +195,9 @@ train_data <- new.df[train_index,]
 test_data <- new.df[test_index,]
 ```
 
-```{r}
+We can now build the model. We are building a logistic regression to predict the purchase of MM. Once we build the model, we will use it on our test set (the data we held out to test performance) to predict how well our model wil perform in real life. 
+
+```{r, building model}
 #Learning relationship between predictor variables and the outcome variables using train data set
 predictionModel <- glm(Purchase ~ ., data = train_data,family=binomial(link='logit'))
 
@@ -182,7 +210,9 @@ test_data$prediction <- predict(predictionModel,newdata = test_data, type ="resp
 test_data$binary_prediction<-ifelse(test_data$prediction > 0.5,1,0)
 ```
 
-```{r}
+Accuracy is the percentage of observations we predited correctly in our test set. We can see our model is 82% accurate. 
+
+```{r, logistic accuracy}
 #Model Accuracy
 test_data <- test_data %>% 
   mutate(accurate = 1*(binary_prediction == test_data$Purchase))
@@ -191,7 +221,9 @@ accuracy <- sum(test_data$accurate)/nrow(test_data)
 print (paste("Accuracy:",round(accuracy,3)))
 ```
 
-```{r}
+The confusion matrix gives us a bit more detail. Remember 1 is MM. So the top left cell means we correctly predicted CH and the bottom right means we correctly predicted MM. The top right is when our model predcited MM when in reality the customer purchased CH. The bottom left is our model predicting CH when it should have predicted MM.
+
+```{r, logistic confusion matrix}
 #Converting Values to a factors
 test_data$binary_prediction<-as.factor(test_data$binary_prediction)
 test_data$Purchase<-as.factor(test_data$Purchase)
@@ -200,12 +232,16 @@ test_data$Purchase<-as.factor(test_data$Purchase)
 t(confusionMatrix(test_data$binary_prediction,test_data$Purchase)$table)
 ```
 
-```{r}
+A few more values to analyze our model performance.
+
+```{r, logistic accuracy stats}
 #Precision and Recall values
 confusionMatrix(test_data$binary_prediction,test_data$Purchase)$byClass
 ```
 
-```{r}
+An ROC plot helps us determine model performance. We want a plot that goes straight up as much as possible to 1 on the y-axis and then over to right side of the x-axis. 
+
+```{r, logistic ROC}
 #ROC Curve
 roc_d <- as.data.frame(cbind(test_data$prediction,test_data$Purchase))
 basicplot <- ggplot(roc_d, aes(d = V2, m = V1)) + geom_roc(n.cuts = 8, labelsize = 4)
@@ -214,6 +250,13 @@ style_roc(xlab = "False Positive Rate", ylab ="True Positive Rate")
 styledplot
 ```
 
+The accuracy stats above mean we can feel pretty confident in our model. Our accuracy is not too high (meaning we won't be able to predict new cases very well), but also not so low it is not giving us any information. Let's take a final look at our model.
+
+```{r, logistic summary}
+summary(predictionModel)
+```
+
+We can conclude that two factors are most important in determining whether a customer purchases MM: lolayCH and PriceDiff. Past purchasing behavior is a good indicator of future purchasing behavior. Additionally, the higher the MM is priced above CH, the less likely customers are to buy it. We will explore these results further in the conclusion.
 
 **Gradient Boosted Tree**
 
