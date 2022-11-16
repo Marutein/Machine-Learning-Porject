@@ -2,7 +2,9 @@
 title: "Mahcine Learning Final Project"
 subtitle: "Predicting Orange Juice Purchase"
 author: "Gary Buckley and Ivan Espino"
-output: pdf_document
+output: 
+  html_document:
+    number_sections: TRUE
 date: "2022-11-03"
 ---
 
@@ -18,7 +20,11 @@ To answer these questions, we have collected 1070 purchases in which the custome
 
 As a result of our analysis, the brand manager can expect us to identify the factors that most strongly influence whether a customer purchases MM or not. In addition, the sales manager can expect a model that will predict whether a customer will purchase MM or CH along with the expected performance of the model.
 
-#Methods
+# Methods
+
+## Logistic Regression
+
+We begin by building a logistic regression model. The advantage of regression models is that they clearly measure the impact of a factor on our target variable. We run a logistic regression since our target variable is binary. This model will help us evaluate which factors are the most important influencers of purchase behavior. 
 
 ```{r, warning=FALSE,library}
 #Libraries used
@@ -35,6 +41,8 @@ library(AICcmodavg)
 library(plotROC)
 ```
 
+### Data Preparation
+
 We start by pulling and preparing our data
 
 ```{r, data}
@@ -48,9 +56,7 @@ glimpse(df)
 head(df)
 ```
 
-**Logistic Regression**
-
-We begin by building a logistic regression model. The advantage of regression models is that they clearly measure the impact of a factor on our target variable. We run a logistic regression since our target variable is binary. This model will help us evaluate which factors are the most important influencers of purchase behavior. 
+#### Code Target Variable
 
 The data is coded such that CH is labeled as 1 and MM as 0. We will swtich these since we want to model whether the customer purchased MM.
 
@@ -68,6 +74,8 @@ df <- df %>%
 head(df)
 ```
 
+#### Split train and test
+
 We'd like to evaluate the predictive power of this model. To do so, we must hold out some of the data so we can test our model on it. We will keep 70% of our data to train the model and use 30% to test it.
 
 ```{r, logistic split}
@@ -81,6 +89,8 @@ test.data <- setdiff(1:nrow(df), train.data)
 train.data <- df[train.data,]
 test.data <- df[test.data,]
 ```
+
+#### Multicollinearity
 
 To ensure our model runs as well as possible, we need to process our predictor variables with some tests and checks.
 
@@ -101,6 +111,8 @@ correlation = cor(train.data)
 corrplot.mixed(correlation, lower.col = "black", tl.cex=.7,number.cex = .7)
 ```
 
+##### Perfect collinearity
+
 This our baseline model *without* removing the collinearity. Notice we get some NA values, meaning the predictors are perfecty correlated (correlation = 1 or -1) with others in the model. We need to remove the predictors.  
 
 ```{r, logistic baseline}
@@ -120,6 +132,8 @@ predictionModel <- glm(Purchase ~ ., data = train.data, family=binomial(link='lo
 summary(predictionModel)
 
 ```
+
+##### High Multicollinearity: Penalized Regression
 
 We have dropped the perfectly collinear variables, but we'd still like to remove those with high colliearity as well. To do so, we run a test to measure collinearity. High numbers mean high collinearity.
 
@@ -154,6 +168,8 @@ print(y4)
 
 ### FIXME
 
+I don't think we need this?? This is the result of the penalize regression, which I don't think we need?
+
 ```{r}
 #Optimal value of λ in the test data
 test.predictors <- data.matrix(test.data[,c(-1)])
@@ -178,8 +194,12 @@ We now drop all the columns that were causing issues to get our final dataset.
 drop <- c("PriceCH","PriceMM", "DiscCH", "DiscMM", "SpecialCH", "SalePriceMM","PctDiscMM","ListPriceDiff")
 new.df = df[,!(names(df) %in% drop)]
 #creating a new DF 
-new.df
+head(new.df)
 ```
+
+### Final Model
+
+#### Split test and train
 
 We again split our final dataset so we can test the performance of our model
 
@@ -195,6 +215,8 @@ train_data <- new.df[train_index,]
 test_data <- new.df[test_index,]
 ```
 
+#### Build Model
+
 We can now build the model. We are building a logistic regression to predict the purchase of MM. Once we build the model, we will use it on our test set (the data we held out to test performance) to predict how well our model wil perform in real life. 
 
 ```{r, building model}
@@ -209,6 +231,8 @@ test_data$prediction <- predict(predictionModel,newdata = test_data, type ="resp
 #Above 50% probabilities are classified as "yes: will purchase the product".
 test_data$binary_prediction<-ifelse(test_data$prediction > 0.5,1,0)
 ```
+
+#### Results and Evaluation
 
 Accuracy is the percentage of observations we predited correctly in our test set. We can see our model is 82% accurate. 
 
@@ -250,6 +274,8 @@ style_roc(xlab = "False Positive Rate", ylab ="True Positive Rate")
 styledplot
 ```
 
+### Logistic Model Conclusion
+
 The accuracy stats above mean we can feel pretty confident in our model. Our accuracy is not too high (meaning we won't be able to predict new cases very well), but also not so low it is not giving us any information. Let's take a final look at our model.
 
 ```{r, logistic summary}
@@ -258,22 +284,32 @@ summary(predictionModel)
 
 We can conclude that two factors are most important in determining whether a customer purchases MM: lolayCH and PriceDiff. Past purchasing behavior is a good indicator of future purchasing behavior. Additionally, the higher the MM is priced above CH, the less likely customers are to buy it. We will explore these results further in the conclusion.
 
-**Gradient Boosted Tree**
+## Gradient Boosted Tree
 
-```{r}
+Above, we built a logistic model that predicted orange juice purchase behavior with 82% accuracy. We now implement a different model - a gradient boosted decision tree - to see if we can improve our accuracy. The downside of this model is that it does not allow us to measure the influence of each predictor on the outcome. To overcome this, we will use some Explainable AI (XAI) methods to see how variables influence the model.  
+
+```{r, warning=FALSE, xgboost libraries}
+#librarires used
 library(tidymodels)
 library(xgboost)
 library(vip)
 library(DALEXtra)
 ```
 
-```{r}
+### Data Preparation
+
+We recast our target variable to be a factor. We then split our data into test and train so we can evaluate how our model will do on out-of-sample data. Again, we keep 70% of our data to train the model.
+
+```{r, xgboost split}
 #Preparing Data
 set.seed(1234)
+
+#recast target as factor
 df$Purchase<-as.factor(df$Purchase)
 
 df$Purchase <- factor(df$Purchase)
 
+#split test and train
 data_testtrn <- initial_split(df, prop = 0.7, strata = Purchase)
 
 train.data.GBT <- training(data_testtrn)
@@ -284,13 +320,25 @@ test.data.GBT$Purchase<-as.factor(test.data.GBT$Purchase)
 data_testtrn$Purchase<-as.factor(data_testtrn$Purchase)
 ```
 
-```{r}
+### Final Model
+
+#### Formulate Model
+
+We wil use all variables to estimate whether a customer will purchase MM. Unlike in logistic regression, we do not need to remove correlated variables while implementing xgboost.
+
+
+```{r, formulation}
 #Model Formulation
 rec_purchase <- recipe(Purchase~., train.data.GBT)%>%
   prep(training = train.data.GBT)
 rec_purchase
 ```
-```{r}
+
+#### Model type
+
+We will use the xgboost method while building our model. This model requires that we select some hyperparameters: the number of trees to grow to produce an estimate, the depth of each tree, and how quickly the algorithm converges (learning rate). To choose these, we will use a tune grid with cross-validation. 
+
+```{r, method}
 #Algorithm Type
 model_purchase <- boost_tree(
                      trees = tune(),
@@ -300,7 +348,11 @@ model_purchase <- boost_tree(
                      set_mode("classification")
 ```
 
-```{r}
+#### Tuning grid
+
+For the three hyperparameters mentioned above, we will check four levels for each: a total of 64 different iterations of the model will be created and cross-validated. 
+
+```{r, tune}
 #Tuning Hyper parameters
 hyper_grid <- grid_regular(
   trees(),
@@ -312,17 +364,24 @@ hyper_grid <- grid_regular(
 purchase_folds <- vfold_cv(train.data.GBT, v=5)
 ```
 
-```{r}
+#### Workflow 
+
+We put our formulation, tuning grid, and model type together into a workflow
+
+```{r, workflow}
 #Aggregating Information to fit the Model
 purchase_wf <- workflow() %>%
   add_model(model_purchase) %>%
   add_recipe(rec_purchase)
 ```
 
-```{r}
+#### Tune the model
+
+```{r, tune model}
 #Performing Metrics to get the best model
 #doParallel::registerDoParallel(cores = 10)
 
+#build model
 set.seed(1234)
 purchase_tune <- purchase_wf %>% 
   tune_grid(
@@ -330,22 +389,37 @@ purchase_tune <- purchase_wf %>%
     grid = hyper_grid,
     metrics = metric_set(roc_auc)
   ) 
+```
 
+#### Results and Evaluation
+
+#### Best Model
+
+The best model (the mdoel with the highest AUC value) uses 667 trees each with a depth of 1. It uses a learning rate of 0.1.
+
+```{r, best model}
+#using auc, show best five models
 show_best(purchase_tune, metric = "roc_auc", n = 5)
 
-
+#save best model
 best_model <- purchase_tune %>%
   select_best("roc_auc")
-best_model
 ```
-```{r}
+
+Add this model to the workflow
+
+```{r, workflow 2}
 #Updating Workflow
 final_workflow <- 
   purchase_wf %>% 
   finalize_workflow(best_model)
 ```
 
-```{r}
+#### Out-of-Sample metrics
+
+Our accuracy has improved to 84% using this model. It performs slightly better than the logistic model. 
+
+```{r, xgboost accuarcy}
 #Validate performance on the test data
 final_fit <- final_workflow %>%
     last_fit(split = data_testtrn) 
@@ -354,7 +428,11 @@ final_fit %>%
   collect_metrics()
 ```
 
-```{r}
+#### Variable importance
+
+This plot show the importance of each variable in determining the prediciton of the model. We can see that, again, past purchasing behavior (LoyalCH) and the difference in price between CH and MM (PriceDiff) are the two most infuenctial factors. We also find that the discount offered on CH (DiscCH) also has a mild effect.
+
+```{r, variable importance}
 #Plotting which variables played an important role
 final_workflow %>%
   fit(data = train.data.GBT) %>%
@@ -362,7 +440,15 @@ final_workflow %>%
   vip(geom = "point")
 ```
 
-```{r}
+How are these influential factors correalted with outcome? To understand this, we will use PDP plots - a form of XAI. 
+
+From the first plot we see that as LocalCH gets higher (the customer is more loyal to the CH brand) the probabiliyt of buying MM decreases. 
+
+We observe a similar negative trend in the plot for PriceDiff - the great the price difference between MM and CH (MM priced higher) the less likely the customer is to buy MM.
+
+Similarly, the greater the discount on CH, the less likely the customer is to buy MM.
+
+```{r, pdp plot}
 #Plot Partial Dependency
 model_fitted <- final_workflow %>%
   fit(data = train.data.GBT)
@@ -382,3 +468,18 @@ plot(pdp_LoyalCH)
 plot(pdp_PriceDiff)
 plot(pdp_DiscCH)
 ```
+
+### XGBoost Model Conclusion
+
+The xgboost model performs slightly better than the logistic model in predicting customer purchase behavior. Using XAI, we confirm that purchase history and price difference are the most influential factors on which product the customer purchases. 
+
+# Results and Conclusion
+
+## To the Brand Manager
+
+Of the factors measured, only five influence whether a customer purchases MM: SpecialMM, LoyalCH, SalePriceCH, PriceDiff, and PctDiscCH. Of these, LoyalCH (the customer's purchase history) and PriceDiff (the difference in price between MM and CH) have the most influence. Customers that buy CH in the past tend to continue buying it in the future. The more expensive MM is than CH, the less likely customers are to buy it. These results were confirmed by both models we run, so we are quite confident these are the two most important factors. 
+
+If you can convert CH customers to buy MM, they will be more likely to purchase this brand in the future. It appears customers are responsive to price. Thus, we suggest lowering the price of MM to below CH for a month. We expect this to convince several usual CH customers to try MM. Once customers have converted, they will be more likely to buy MM in the future, even if the pricee of MM goes up.
+
+
+
