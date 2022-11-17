@@ -74,9 +74,21 @@ df <- df %>%
 head(df)
 ```
 
+#### Class Balance
+
+One issue we need to look out for in our data is whether we have enough observations for both CH and MM. If we have a lot of observations of one and very few of the other, our model will not be able to learn the difference between the shoppers for each. In our case, we have a pretty balanced dataset and can proceed as normal.
+
+```{r, class imbalance}
+df$Purchase %>% 
+  table()
+```
+
+
 #### Split train and test
 
-We'd like to evaluate the predictive power of this model. To do so, we must hold out some of the data so we can test our model on it. We will keep 70% of our data to train the model and use 30% to test it.
+If we use all the data we have to build our algorithm, our model will learn the data *too* well. Our model will be very good at predicting whether customers in our dataset wil buy MM, but very poor at predicting whether new customers will buy MM. This is referred to as overfitting. To avoid this, we will build our model using only a part of the data. Then to evaluate the predictive power of this model, we will use the part held out to test the model performance on 'new' data.  
+
+We will keep 70% of our data to train the model and use 30% to test it.
 
 ```{r, logistic split}
 #Splitting the data into Train, Test
@@ -161,30 +173,9 @@ The dots tell us we also need to drop these variables to avoid multicollinearity
 
 ```{r, lasso 2}
 #Applying shrinkage parameter λ
-(best.lambda <- cv.binomial$lambda.min)
+best.lambda <- cv.binomial$lambda.min
 y4<- coef(cv.binomial, s="lambda.min", exact=FALSE)
 print(y4)
-```
-
-### FIXME
-
-I don't think we need this?? This is the result of the penalize regression, which I don't think we need?
-
-```{r}
-#Optimal value of λ in the test data
-test.predictors <- data.matrix(test.data[,c(-1)])
-actual <- test.data$Purchase
-pred.model = predict(cv.binomial, newx = test.predictors, type = "response",s ="lambda.min")
-
-pred <- prediction(pred.model, test.data$Purchase)
-perf <- performance(pred,"tpr","fpr")
-auc_ROCR <- performance(pred,measure ="auc")
-
-# plot ROC curve
-plot(perf,colorize=FALSE, col="black") 
-lines(c(0,1),c(0,1),col = "gray", lty = 4 )
-text(1,0.15,labels=paste("AUC = ",round(auc_ROCR@y.values[[1]],
-                                        digits=2),sep=""),adj=1)
 ```
 
 We now drop all the columns that were causing issues to get our final dataset. 
@@ -282,13 +273,19 @@ The accuracy stats above mean we can feel pretty confident in our model. Our acc
 summary(predictionModel)
 ```
 
-We can conclude that two factors are most important in determining whether a customer purchases MM: lolayCH and PriceDiff. Past purchasing behavior is a good indicator of future purchasing behavior. Additionally, the higher the MM is priced above CH, the less likely customers are to buy it. We will explore these results further in the conclusion.
+Only two of the variables have a significant influence on whether a customer purchases MM: LoyalCH and PriceDiff. (SpecialMM is significant at the 10% level, but not the 5% level, so at best it's influence is weak).
+
+LolayCH is the most significant factor in whether a customer purchases MM. LoyalCH is a proxy for past purchase behavior. If we compare two identical customers, but one has bought only MM in the past (LoyalCH=0) and the other has bought only CH (LoyalCH=1), the log odds of the second customer purchasing MM are 6.72 lower than the first. Log odds can be difficult to interpret directly, but in summary customers are very likely to persist in the past purchasing behavior. 
+
+PriceDiff is also significant. For every dollar the price of MM is higher than the price of CH, the log odds of the custoemr purchasing MM drop 2.46. The higher MM is priced above CH, the less likely customers are to buy it.
 
 ## Gradient Boosted Tree
 
-Above, we built a logistic model that predicted orange juice purchase behavior with 82% accuracy. We now implement a different model - a gradient boosted decision tree - to see if we can improve our accuracy. The downside of this model is that it does not allow us to measure the influence of each predictor on the outcome. To overcome this, we will use some Explainable AI (XAI) methods to see how variables influence the model.  
+Above, we built a logistic model that predicted orange juice purchase behavior with 82% accuracy. We now implement a different model - a gradient boosted decision tree - to see if we can improve our accuracy. The downside of this model is that it does not allow us to measure the influence of each predictor on the outcome. To overcome this, we will use some Explainable AI (XAI) methods to see how variables influence the model. 
 
-```{r, warning=FALSE, xgboost libraries}
+This method does not require us to eliminate multicollinearity, so we will use all variables in the model.
+
+```{r, xgboost library}
 #librarires used
 library(tidymodels)
 library(xgboost)
@@ -298,7 +295,7 @@ library(DALEXtra)
 
 ### Data Preparation
 
-We recast our target variable to be a factor. We then split our data into test and train so we can evaluate how our model will do on out-of-sample data. Again, we keep 70% of our data to train the model.
+We recast our target variable to be a factor. We then split our data into test and train so we can evaluate how our model will do on out-of-sample data and avoid overfitting. Again, we keep 70% of our data to train the model.
 
 ```{r, xgboost split}
 #Preparing Data
@@ -350,7 +347,7 @@ model_purchase <- boost_tree(
 
 #### Tuning grid
 
-For the three hyperparameters mentioned above, we will check four levels for each: a total of 64 different iterations of the model will be created and cross-validated. 
+For the three hyperparameters mentioned above, we will check four levels for each. This means we will create a total of 64 different iterations of the model, each with different hyperparametes. We will then use cross-validation to select the best hyperparameters for the model.
 
 ```{r, tune}
 #Tuning Hyper parameters
@@ -391,11 +388,11 @@ purchase_tune <- purchase_wf %>%
   ) 
 ```
 
-#### Results and Evaluation
+### Results and Evaluation
 
 #### Best Model
 
-The best model (the mdoel with the highest AUC value) uses 667 trees each with a depth of 1. It uses a learning rate of 0.1.
+We use AUC to select the best model. Intuitively, the higher the AUC value, the better our model is at discriminating between those purchase CH and MM. The best model (the mdoel with the highest AUC value) uses 667 trees each with a depth of 1. It uses a learning rate of 0.1.
 
 ```{r, best model}
 #using auc, show best five models
@@ -442,7 +439,7 @@ final_workflow %>%
 
 How are these influential factors correalted with outcome? To understand this, we will use PDP plots - a form of XAI. 
 
-From the first plot we see that as LocalCH gets higher (the customer is more loyal to the CH brand) the probabiliyt of buying MM decreases. 
+From the first plot we see that as LocalCH gets higher (the customer is more loyal to the CH brand) the probability of buying MM decreases. 
 
 We observe a similar negative trend in the plot for PriceDiff - the great the price difference between MM and CH (MM priced higher) the less likely the customer is to buy MM.
 
@@ -477,13 +474,15 @@ The xgboost model performs slightly better than the logistic model in predicting
 
 ## To the Brand Manager
 
-Of the factors measured, only five influence whether a customer purchases MM: SpecialMM, LoyalCH, SalePriceCH, PriceDiff, and PctDiscCH. Of these, LoyalCH (the customer's purchase history) and PriceDiff (the difference in price between MM and CH) have the most influence. Customers that buy CH in the past tend to continue buying it in the future. The more expensive MM is than CH, the less likely customers are to buy it. These results were confirmed by both models we run, so we are quite confident these are the two most important factors. 
+Of the factors measured, five carry the most information on customer purchase hevaior: SpecialMM, LoyalCH, SalePriceCH, PriceDiff, and PctDiscCH. Of these, LoyalCH (the customer's purchase history) and PriceDiff (the difference in price between MM and CH) have the most influence. Customers that buy CH in the past tend to continue buying it in the future. The more expensive MM is than CH, the less likely customers are to buy it. These results were confirmed by both models we run, so we are quite confident these are the two most important factors. 
 
-If you can convert CH customers to buy MM, they will be more likely to purchase this brand in the future. It appears customers are responsive to price. Thus, we suggest lowering the price of MM to below CH for a month. We expect this to convince several usual CH customers to try MM. Once customers have converted, they will be more likely to buy MM in the future, even if the pricee of MM goes up.
+If you can convert CH customers to buy MM, they will be more likely to purchase MM in the future since brand loyalty is persistent. It appears customers are responsive to price. Thus, we suggest lowering the price of MM to below CH for a month. We expect this to convince several usual CH customers to try MM. Once customers have converted, they will be more likely to continue buying MM in the future, even if the pricee of MM goes up.
 
 ## To the Sales Manager
 
-We expect that we can predict whether a customer will purchase MM with 84% accuracy. The model we selected is an xgboost model which we fine-tuned to get the best accuracy. Although this accuracy might be lower than expected, we are confident our model didn't learn *too* well, which would mean it would perform poorly on future predictions. Instead, we are quite confident future predictions will be accurate around 84% of the time.
+We expect that we can predict whether a customer will purchase MM with 84% accuracy. The model we selected is an xgboost model which we fine-tuned to get the highest AUC. With this level of accuracy we are confident our model didn't learn *too* well, which would mean it would perform poorly on future predictions. Instead, we are quite confident future predictions will be accurate around 84% of the time.
+
+Further, we can predict effects of possible strategies. We expect that changing the price of MM to be 40 cents lower than CH from 40 cents higher would cause customers to, on average, increase their probability of buying MM by 30%. Depending on the scale of the store, we could run a cost-benefit analysis to determine if the increased volume is worth the lower price (and therefore lower revenue).
 
 
 
