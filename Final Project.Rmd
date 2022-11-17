@@ -1,11 +1,11 @@
 ---
-title: "Mahcine Learning Final Project"
+title: "Machine Learning Final Project"
 subtitle: "Predicting Orange Juice Purchase"
 author: "Gary Buckley and Ivan Espino"
 output: 
   html_document:
     number_sections: TRUE
-date: "2022-11-03"
+date: "2022-11-16"
 ---
 
 # Problem Statement
@@ -480,6 +480,10 @@ The xgboost model performs slightly better than the logistic model in predicting
 Of the factors measured, only five influence whether a customer purchases MM: SpecialMM, LoyalCH, SalePriceCH, PriceDiff, and PctDiscCH. Of these, LoyalCH (the customer's purchase history) and PriceDiff (the difference in price between MM and CH) have the most influence. Customers that buy CH in the past tend to continue buying it in the future. The more expensive MM is than CH, the less likely customers are to buy it. These results were confirmed by both models we run, so we are quite confident these are the two most important factors. 
 
 If you can convert CH customers to buy MM, they will be more likely to purchase this brand in the future. It appears customers are responsive to price. Thus, we suggest lowering the price of MM to below CH for a month. We expect this to convince several usual CH customers to try MM. Once customers have converted, they will be more likely to buy MM in the future, even if the pricee of MM goes up.
+
+## To the Sales Manager
+
+We expect that we can predict whether a customer will purchase MM with 84% accuracy. The model we selected is an xgboost model which we fine-tuned to get the best accuracy. Although this accuracy might be lower than expected, we are confident our model didn't learn *too* well, which would mean it would perform poorly on future predictions. Instead, we are quite confident future predictions will be accurate around 84% of the time.
 
 
 
